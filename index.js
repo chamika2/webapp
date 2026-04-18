@@ -3,7 +3,7 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs'); // Database එක හදන්න අවශ්‍ය library එක
 
 // 🔴 ඔබේ පුද්ගලික අංකය මෙතන දෙන්න (අනිවාර්යයෙන්ම 94 න් පටන් ගෙන @c.us වලින් අවසන් විය යුතුයි)
-const const ADMIN_NUMBER = '94762375808@c.us'; 
+const ADMIN_NUMBER = '94762375808@c.us'; 
 const DB_FILE = __dirname + '/database.json';
 
 // Database එක කියවීම
