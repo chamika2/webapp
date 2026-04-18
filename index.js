@@ -32,7 +32,7 @@ async function createBot(sessionName, isMaster = false) {
     console.log(`[SYSTEM] ${sessionName} bot ආරම්භ කරමින් පවතී...`);
     
     const client = new Client({
-        authStrategy: new LocalAuth({ clientId: sessionName }),
+        authStrategy: isMaster ? new LocalAuth() : new LocalAuth({ clientId: sessionName }),
         puppeteer: {
             headless: true,
             args: ['--no-sandbox', '--disable-setuid-sandbox']
