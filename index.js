@@ -3,7 +3,7 @@ const qrcode = require('qrcode-terminal');
 const fs = require('fs'); // Database එක හදන්න අවශ්‍ය library එක
 
 // 🔴 ඔබේ පුද්ගලික අංකය මෙතන දෙන්න (අනිවාර්යයෙන්ම 94 න් පටන් ගෙන @c.us වලින් අවසන් විය යුතුයි)
-const ADMIN_NUMBER = '94762375808@c.us'; 
+const const ADMIN_NUMBER = '94762375808@c.us'; 
 const DB_FILE = __dirname + '/database.json';
 
 // Database එක කියවීම
@@ -48,7 +48,7 @@ client.on('message', async (message) => {
     if (message.from.includes('@g.us')) return;
 
     const text = message.body.toLowerCase().trim();
-    const isFromAdmin = message.from === ADMIN_NUMBER; // මැසේජ් එක එව්වේ Admin ද?
+    const isFromAdmin = (message.from === '94762375808@c.us' || message.from === '274968235528230@lid'); // මැසේජ් එක එව්වේ Admin ද?
 
     // ----------------------------------------------------
     // 1. ADMIN COMMANDS (ඔබට පමණක් භාවිතා කළ හැකි විධානයන්)
