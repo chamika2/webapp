@@ -1,33 +1,97 @@
 const { Client, LocalAuth } = require('whatsapp-web.js');
 const qrcode = require('qrcode-terminal');
+const fs = require('fs'); // Database එක හදන්න අවශ්‍ය library එක
+
+// 🔴 ඔබේ පුද්ගලික අංකය මෙතන දෙන්න (අනිවාර්යයෙන්ම 94 න් පටන් ගෙන @c.us වලින් අවසන් විය යුතුයි)
+const ADMIN_NUMBER = '94753151248@c.us'; 
+const DB_FILE = './database.json'; // Reply සේව් වෙන ෆයිල් එක
+
+// Database එක කියවීම
+function getReplies() {
+    if (!fs.existsSync(DB_FILE)) return {};
+    return JSON.parse(fs.readFileSync(DB_FILE, 'utf8'));
+}
+
+// Database එකට අලුත් Reply එකක් ලිවීම
+function saveReply(keyword, reply) {
+    let replies = getReplies();
+    replies[keyword.toLowerCase()] = reply;
+    fs.writeFileSync(DB_FILE, JSON.stringify(replies, null, 2));
+}
+
+// Database එකෙන් Reply එකක් මැකීම
+function deleteReply(keyword) {
+    let replies = getReplies();
+    delete replies[keyword.toLowerCase()];
+    fs.writeFileSync(DB_FILE, JSON.stringify(replies, null, 2));
+}
 
 const client = new Client({
     authStrategy: new LocalAuth(),
     puppeteer: {
-        args: ['--no-sandbox', '--disable-setuid-sandbox'], // VPS එකක දුවන නිසා මෙය අත්‍යවශ්‍යයි
+        headless: true,
+        args: ['--no-sandbox', '--disable-setuid-sandbox']
     }
 });
 
 client.on('qr', (qr) => {
     qrcode.generate(qr, {small: true});
-    console.log('ඉහත QR code එක scan කරන්න.');
 });
 
 client.on('ready', () => {
-    console.log('Bot එක සාර්ථකව වැඩ ආරම්භ කළා!');
+    console.log('✅ Advanced Admin Bot වැඩ ආරම්භ කළා!');
 });
 
 client.on('message', async (message) => {
-    const text = message.body.toLowerCase();
+    // Group මැසේජ් මඟ හැරීම
+    if (message.from.includes('@g.us')) return;
 
-    if (text === 'hi' || text === 'hello') {
-        await client.sendMessage(message.from, `Hello! ඔබට උදව් කරන්නේ කොහොමද?`);
-    } 
-    else if (text === 'price') {
-        await client.sendMessage(message.from, `අපගේ සේවාවන් රු. 1000 සිට ආරම්භ වේ. වැඩි විස්තර සඳහා අප අමතන්න.`);
+    const text = message.body.toLowerCase().trim();
+    const isFromAdmin = message.from === ADMIN_NUMBER; // මැසේජ් එක එව්වේ Admin ද?
+
+    // ----------------------------------------------------
+    // 1. ADMIN COMMANDS (ඔබට පමණක් භාවිතා කළ හැකි විධානයන්)
+    // ----------------------------------------------------
+    if (isFromAdmin) {
+        
+        // අලුත් Reply එකක් දැමීම (උදා: #add price | අපේ ගාස්තුව 1000 යි)
+        if (text.startsWith('#add ')) {
+            const parts = message.body.substring(5).split('|');
+            if (parts.length === 2) {
+                saveReply(parts[0].trim(), parts[1].trim());
+                await message.reply(`✅ *සාර්ථකයි!* \n\n"${parts[0].trim()}" ලෙස කවුරුහරි එවුවොත් මින්පසු reply යාවි.`);
+            } else {
+                await message.reply(`❌ *වැරදි ආකෘතියක්!* \nකරුණාකර මේ විදිහට එවන්න:\n#add [වචනය] | [පිළිතුර]`);
+            }
+            return;
+        }
+
+        // Reply එකක් මැකීම (උදා: #remove price)
+        if (text.startsWith('#remove ')) {
+            const keyword = message.body.substring(8).trim();
+            deleteReply(keyword);
+            await message.reply(`🗑️ "${keyword}" සඳහා වූ reply එක මකා දැමුවා!`);
+            return;
+        }
+
+        // දැනට තියෙන ඔක්කොම Replies බැලීම (#list)
+        if (text === '#list') {
+            const replies = getReplies();
+            let msg = '*දැනට ඇති Auto Replies ලැයිස්තුව:*\n\n';
+            for (const [key, val] of Object.entries(replies)) {
+                msg += `🔹 *${key}* ➡ ${val}\n`;
+            }
+            await message.reply(msg === '*දැනට ඇති Auto Replies ලැයිස්තුව:*\n\n' ? 'කිසිදු Reply එකක් දත්ත ගබඩාවේ නැත.' : msg);
+            return;
+        }
     }
-    else if (text === 'location') {
-        await client.sendMessage(message.from, `අපි ඉන්නේ කොළඹ.`);
+
+    // ----------------------------------------------------
+    // 2. NORMAL AUTO REPLY LOGIC (පාරිභෝගිකයින්ට යන පිළිතුරු)
+    // ----------------------------------------------------
+    const savedReplies = getReplies();
+    if (savedReplies[text]) {
+        await message.reply(savedReplies[text]);
     }
 });
 
