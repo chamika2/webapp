@@ -4,7 +4,7 @@ const fs = require('fs'); // Database එක හදන්න අවශ්‍ය 
 
 // 🔴 ඔබේ පුද්ගලික අංකය මෙතන දෙන්න (අනිවාර්යයෙන්ම 94 න් පටන් ගෙන @c.us වලින් අවසන් විය යුතුයි)
 const ADMIN_NUMBER = '94762375808@c.us'; 
-const DB_FILE = './database.json'; // Reply සේව් වෙන ෆයිල් එක
+const DB_FILE = __dirname + '/database.json';
 
 // Database එක කියවීම
 function getReplies() {
@@ -43,6 +43,7 @@ client.on('ready', () => {
 });
 
 client.on('message', async (message) => {
+    console.log(`[DEBUG] ආපු නම්බර් එක: ${message.from} | මැසේජ් එක: ${message.body}`);
     // Group මැසේජ් මඟ හැරීම
     if (message.from.includes('@g.us')) return;
 
