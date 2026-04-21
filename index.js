@@ -3,27 +3,18 @@ const qrcodeTerminal = require('qrcode-terminal');
 const qrcode = require('qrcode'); 
 const fs = require('fs');
 
-// ==========================================
-// 🔴 පද්ධති පාලන අංක (අනිවාර්යයෙන්ම වෙනස් කරන්න)
-// ==========================================
-
-// Super Admin (මෙය ඔබගේ පුද්ගලික අංකයයි - මුළු පද්ධතියම Lock කිරීමට හැකියාව ඇත)
-const SUPER_ADMIN = '947XXXXXXXX@c.us'; 
-
-// Master Admin (මෙය ඔබගේ පාරිභෝගිකයාගේ අංකයයි - ඔහුට අලුත් Bots සෑදිය හැක)
-const MASTER_ADMIN = '94710401860@c.us';
-const MASTER_LID = '274968235528230@lid'; 
-
-// ==========================================
-// ගොනු පිහිටුම් (File Paths)
-// ==========================================
 const DB_FILE = __dirname + '/database.json';
 const SESSIONS_FILE = __dirname + '/sessions.json';
-const LOCK_FILE = __dirname + '/system.lock';
+const CONFIG_FILE = __dirname + '/config.json'; // Admin ගේ අංකය සේව් වන අලුත් ගොනුව
 
 // දත්ත ගබඩා මුලින්ම සකසා ගැනීම
 if (!fs.existsSync(DB_FILE)) fs.writeFileSync(DB_FILE, JSON.stringify({}));
 if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, JSON.stringify(["master"]));
+
+// මුල්ම Owner ගේ අංකය (ඔබේ අංකය) මෙහි සකසා ඇත. පසුව මෙය WhatsApp හරහා වෙනස් කළ හැක.
+if (!fs.existsSync(CONFIG_FILE)) {
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ master_admin: "94710401860@c.us" }, null, 2));
+}
 
 let clients = {}; 
 
@@ -31,6 +22,12 @@ let clients = {};
 function getDB() { return JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); }
 function saveDB(data) { fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2)); }
 function getSessions() { return JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf8')); }
+function getConfig() { return JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8')); }
+function setConfig(key, value) {
+    let config = getConfig();
+    config[key] = value;
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(config, null, 2));
+}
 
 function saveSession(name) {
     let sessions = getSessions();
@@ -46,40 +43,35 @@ function removeSession(name) {
     fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2));
 }
 
-// ==========================================
 // ප්‍රධාන Bot ක්‍රියාවලිය
-// ==========================================
 async function createBot(sessionName, isMaster = false) {
-    console.log(`[SYSTEM] ${sessionName} bot ආරම්භ කරමින් පවතී...`);
+    console.log(`[SYSTEM] Starting bot: ${sessionName}...`);
     
-    let qrCount = 0;
+    let qrCount = 0; 
     const MAX_QR = 3; 
 
-    // අලුත් Browser Settings මෙහි ඇතුළත් කර ඇත
     const client = new Client({
         authStrategy: isMaster ? new LocalAuth() : new LocalAuth({ clientId: sessionName }),
         puppeteer: {
             headless: true,
-            args: [
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-extensions',
-                '--disable-dev-shm-usage',
-                '--disable-accelerated-2d-canvas',
-                '--no-first-run',
-                '--no-zygote',
-                '--disable-gpu'
-            ],
-            userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.0.0 Safari/537.36'
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-extensions', '--disable-dev-shm-usage']
+        },
+        // 🔴 Try Again Error එක සෑදීම වැළැක්වීමේ විශේෂ කේතය (WhatsApp Update Bypass)
+        webVersionCache: {
+            type: 'remote',
+            remotePath: 'https://raw.githubusercontent.com/wppconnect-team/wa-version/main/html/2.2412.54.html'
         }
     });
 
-    // --- QR Code එක හැදෙන විට ---
     client.on('qr', async (qr) => {
         qrCount++; 
+        let config = getConfig();
+        const CURRENT_MASTER = config.master_admin;
+
         if (qrCount > MAX_QR) {
+            console.log(`[SYSTEM] QR scan timeout for ${sessionName}.`);
             if (clients['master'] && !isMaster) {
-                await clients['master'].sendMessage(MASTER_ADMIN, `❌ *Timeout:* "${sessionName}" Bot සඳහා QR ස්කෑන් කිරීම ප්‍රමාද වූ බැවින් ක්‍රියාවලිය නතර විය.`);
+                await clients['master'].sendMessage(CURRENT_MASTER, `❌ *Timeout:* "${sessionName}" සඳහා QR ස්කෑන් කිරීම ප්‍රමාද විය. \nනැවත අවශ්‍ය නම් *#newbot ${sessionName}* ලෙස එවන්න.`);
             }
             client.destroy(); 
             return;
@@ -92,72 +84,91 @@ async function createBot(sessionName, isMaster = false) {
                 const qrImage = await qrcode.toDataURL(qr);
                 const base64Data = qrImage.replace(/^data:image\/png;base64,/, "");
                 const media = new MessageMedia('image/png', base64Data, 'qr.png');
+                
                 if (clients['master']) {
-                    await clients['master'].sendMessage(MASTER_ADMIN, media, { 
-                        caption: `*අලුත් QR Code එක (${qrCount}/${MAX_QR}):* ${sessionName}\n\nමිනිත්තුවක් ඇතුළත Scan කරන්න.` 
+                    await clients['master'].sendMessage(CURRENT_MASTER, media, { 
+                        caption: `*අලුත් QR Code එක (${qrCount}/${MAX_QR}):* ${sessionName}\n\nතත්පර 20කින් Expire වේ. වහාම Scan කරන්න.` 
                     });
                 }
             } catch (err) { console.error('QR Image Error:', err); }
         }
     });
 
-    // --- Bot සූදානම් වූ විට ---
     client.on('ready', () => {
-        console.log(`✅ [${sessionName}] සාර්ථකව සම්බන්ධ විය!`);
+        console.log(`✅ [${sessionName}] Successfully connected!`);
+        let config = getConfig();
         if (isMaster && clients['master']) {
-            clients['master'].sendMessage(MASTER_ADMIN, `✅ *WhatsApp SaaS System Online!* \n\nCommands:\n#newbot [name]\n#removebot [name]`);
+            clients['master'].sendMessage(config.master_admin, `✅ *SaaS System Online!*\n\n🔹 අලුත් Bot කෙනෙක් හදන්න:\n#newbot [name]\n\n🔹 Bot කෙනෙක් මකන්න:\n#removebot [name]\n\n👑 *Owner අයිතිය වෙනත් අංකයකට මාරු කරන්න:*\n#setowner 947XXXXXXXX`);
         }
     });
 
-    // --- පණිවිඩ ලැබෙන විට ---
     client.on('message_create', async (message) => {
-        if (message.from.includes('@g.us')) return;
-
-        // 1. 🔴 SUPER ADMIN KILL SWITCH
-        if (message.from === SUPER_ADMIN) {
-            if (message.body === '#locksystem') {
-                fs.writeFileSync(LOCK_FILE, 'locked');
-                await message.reply('🛑 *SYSTEM LOCKED!* \nමුළු පද්ධතියම අක්‍රිය කරන ලදී.');
-                return;
-            }
-            if (message.body === '#unlocksystem') {
-                if (fs.existsSync(LOCK_FILE)) fs.unlinkSync(LOCK_FILE);
-                await message.reply('✅ *SYSTEM UNLOCKED!* \nපද්ධතිය නැවත සක්‍රිය කරන ලදී.');
-                return;
-            }
-        }
-
-        if (fs.existsSync(LOCK_FILE)) return;
+        if (message.from.includes('@g.us')) return; 
 
         const botNumber = client.info.wid._serialized;
         const isSelfMessage = (message.from === botNumber && message.to === botNumber);
-        const isMasterAdminMessage = isMaster && (message.from === MASTER_ADMIN || message.from === MASTER_LID);
+        
+        let config = getConfig();
+        const CURRENT_MASTER = config.master_admin;
+        const isMasterAdminMessage = isMaster && (message.from === CURRENT_MASTER || message.from === '274968235528230@lid');
 
-        // 2. MASTER ADMIN COMMANDS
+        // ==========================================
+        // 1. Master Admin Commands (ඔබට හෝ අලුත් Owner ට)
+        // ==========================================
         if (isMasterAdminMessage) {
-            if (message.body.startsWith('#newbot ')) {
-                const name = message.body.split(' ')[1];
-                if (name) {
-                    saveSession(name);
-                    createBot(name, false);
-                    await message.reply(`⏳ "${name}" සකසමින් පවතී...`);
+            
+            // 🔴 අලුත් පහසුකම: Owner අයිතිය මාරු කිරීම
+            if (message.body.startsWith('#setowner ')) {
+                let newOwner = message.body.split(' ')[1];
+                if (newOwner) {
+                    // අංකයට @c.us නැත්නම් එය ස්වයංක්‍රීයව එකතු කිරීම
+                    if (!newOwner.includes('@c.us')) newOwner = newOwner + '@c.us';
+                    
+                    setConfig('master_admin', newOwner);
+                    await message.reply(`✅ *සාර්ථකයි!* \nපද්ධතියේ සම්පූර්ණ අයිතිය (Owner) ${newOwner} වෙත මාරු කරන ලදී. මින්පසු ඔබට මෙම පද්ධතිය පාලනය කළ නොහැක.`);
+                    
+                    // අලුත් Owner ට පණිවිඩයක් යැවීම
+                    try {
+                        await clients['master'].sendMessage(newOwner, `👑 *ඔබට පද්ධතියේ ප්‍රධාන අයිතිය (Master Admin) ලැබී ඇත!*\n\nCommands:\n#newbot [name]\n#removebot [name]\n#setowner [number]`);
+                    } catch(e) {}
                 }
                 return;
             }
+
+            if (message.body.startsWith('#newbot ')) {
+                const newSessionName = message.body.split(' ')[1];
+                if (newSessionName) {
+                    await message.reply(`⏳ "${newSessionName}" සඳහා අලුත් Bot කෙනෙක් සකසමින් පවතී...`);
+                    saveSession(newSessionName);
+                    createBot(newSessionName, false);
+                }
+                return;
+            }
+
             if (message.body.startsWith('#removebot ')) {
-                const name = message.body.split(' ')[1];
-                if (name && name !== 'master') {
-                    removeSession(name);
-                    if (clients[name]) { clients[name].destroy(); delete clients[name]; }
-                    const sessionDir = __dirname + `/.wwebjs_auth/session-${name}`;
+                const targetSession = message.body.split(' ')[1];
+                if (targetSession) {
+                    if (targetSession === 'master') {
+                        await message.reply('❌ Master Bot එක මකා දැමිය නොහැක!');
+                        return;
+                    }
+                    await message.reply(`⏳ Removing "${targetSession}"...`);
+                    removeSession(targetSession); 
+                    if (clients[targetSession]) {
+                        clients[targetSession].destroy(); 
+                        delete clients[targetSession];
+                    }
+                    const sessionDir = __dirname + `/.wwebjs_auth/session-${targetSession}`;
                     if (fs.existsSync(sessionDir)) fs.rmSync(sessionDir, { recursive: true, force: true });
-                    await message.reply(`✅ "${name}" ඉවත් කරන ලදී.`);
+                    await message.reply(`✅ Bot "${targetSession}" ඉවත් කරන ලදී.`);
                 }
                 return;
             }
         }
 
-        // 3. USER COMMANDS
+        // ==========================================
+        // 2. User Commands (තමන්ගේ Replies සකසා ගැනීමට)
+        // ==========================================
         if (isSelfMessage) {
             const text = message.body.toLowerCase().trim();
             let db = getDB();
@@ -180,14 +191,16 @@ async function createBot(sessionName, isMaster = false) {
                 return;
             }
             if (text === '#list') {
-                let msg = '*Auto Replies:*\n';
+                let msg = '*Auto-Replies:*\n\n';
                 for (const [key, val] of Object.entries(db[botNumber])) { msg += `🔹 *${key}* ➡ ${val}\n`; }
-                await message.reply(msg);
+                await message.reply(msg === '*Auto-Replies:*\n\n' ? 'No replies added.' : msg);
                 return;
             }
         }
 
-        // 4. AUTO REPLY LOGIC
+        // ==========================================
+        // 3. Auto-Reply (සාමාන්‍ය මැසේජ් සඳහා)
+        // ==========================================
         if (message.from !== botNumber && !isSelfMessage) {
             const text = message.body.toLowerCase().trim();
             let db = getDB();
@@ -201,7 +214,6 @@ async function createBot(sessionName, isMaster = false) {
     clients[sessionName] = client; 
 }
 
-// පද්ධතිය ආරම්භ කිරීම
 const savedSessions = getSessions();
 savedSessions.forEach(session => {
     createBot(session, session === 'master');
