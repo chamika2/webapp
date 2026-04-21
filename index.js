@@ -13,7 +13,7 @@ if (!fs.existsSync(SESSIONS_FILE)) fs.writeFileSync(SESSIONS_FILE, JSON.stringif
 
 // මුල්ම Owner ගේ අංකය (ඔබේ අංකය) මෙහි සකසා ඇත. පසුව මෙය WhatsApp හරහා වෙනස් කළ හැක.
 if (!fs.existsSync(CONFIG_FILE)) {
-    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ master_admin: "94710401860@c.us" }, null, 2));
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify({ master_admin: "94753151248@c.us" }, null, 2));
 }
 
 let clients = {}; 
